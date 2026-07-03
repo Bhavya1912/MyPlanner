@@ -2,16 +2,18 @@
 
 A personal productivity website: monthly calendar, daily planner, and a full
 task manager (priorities, categories, tags, subtasks, recurrence, search,
-filters, sorting, drag‑to‑reschedule, light/dark mode) — backed by a real
-cloud database and a private login, so it works the same from your laptop
-or your phone.
+filters, sorting, drag‑to‑reschedule, dark mode by default) — saved locally
+by default, with optional Supabase sync and private login if you configure it.
 
-This is a **single-account app**: there's no public sign-up. You create the
-one login for yourself, and everything is locked to that account.
+This can run as a **local-only planner** with no cloud setup required. If you
+configure Supabase, it becomes a **single-account synced app**: there's no
+public sign-up, and everything is locked to your account.
 
 ---
 
-## 1. Create your database (Supabase, free)
+## 1. Create your database (optional Supabase sync)
+
+Skip this section if you only want local browser storage. For cloud sync:
 
 1. Go to [supabase.com](https://supabase.com) and create a free account and
    a new project (pick any name/region; save the database password it
@@ -21,9 +23,12 @@ one login for yourself, and everything is locked to that account.
    click **Run**. This creates the table that stores your planner data and
    locks it so only you can read or write it.
 3. Open **Project Settings → API**. You'll need two values from this page:
-   - **Project URL**
-   - **anon public** key (this one is safe to expose in client code — it's
-     the publishable key, not the secret one)
+   - **Project URL** → put this in `VITE_SUPABASE_URL`. It already contains
+     your Project ID/reference, for example `https://abc123xyz.supabase.co`.
+     You do not enter the Project ID separately; use it as part of this URL.
+   - **Publishable key** / **anon public** key → put this in
+     `VITE_SUPABASE_ANON_KEY`. This one is safe to expose in client code —
+     it is not the secret service role key.
 
 ## 2. Create your login
 
@@ -37,11 +42,15 @@ one login for yourself, and everything is locked to that account.
 ## 3. Configure the project
 
 1. Copy `.env.example` to a new file named `.env` in this folder.
-2. Fill in the two values from step 1:
+2. Fill in the two values from step 1. If Supabase shows a Project ID/reference
+   such as `abc123xyz`, put it inside the URL like this:
    ```
-   VITE_SUPABASE_URL=https://your-project-ref.supabase.co
-   VITE_SUPABASE_ANON_KEY=your-anon-public-key
+   VITE_SUPABASE_URL=https://abc123xyz.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-publishable-or-anon-public-key
    ```
+   Do not add a separate Project ID variable; the app only needs the full
+   Supabase URL and the anon/public key. If `npm run dev` is already running,
+   stop it and start it again after saving `.env` so Vite reloads the values.
 
 ## 4. Run it locally to test
 
@@ -50,10 +59,11 @@ npm install
 npm run dev
 ```
 
-Open the printed URL, sign in with the account you created in step 2 — you
-should see the planner, and any changes you make will sync to Supabase
+Open the printed URL. If Supabase is not configured, the planner opens in
+local-only mode and saves to this browser. If Supabase is configured, sign in
+with the account you created in step 2 and changes will sync to Supabase
 within a second (check the small status dot in the sidebar's settings
-panel: "Synced" / "Saving…" / "Offline").
+panel: "Synced" / "Saving…" / "Offline" / "Local only").
 
 ## 5. Deploy it as a real website
 
@@ -62,9 +72,15 @@ panel: "Synced" / "Saving…" / "Offline").
 1. Push this project to a GitHub repo (or use the Vercel CLI to deploy
    directly from this folder — see below).
 2. Go to [vercel.com/new](https://vercel.com/new) and import the repo.
-3. Vercel auto-detects Vite. Before deploying, add the same two
+3. Use the **Vite** framework preset if Vercel asks you to choose one
+   (the app is React + Vite, not Create React App). Before deploying, add the same two
    environment variables from your `.env` file under **Environment
    Variables**: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+   If the site is already deployed and says Supabase is not configured, open
+   **Vercel → Project → Settings → Environment Variables**, add both values
+   for Production, then redeploy because Vite reads these values at build time.
+   Supabase's Vercel integration may create `NEXT_PUBLIC_SUPABASE_URL` and
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; this app supports those too.
 4. Click **Deploy**. You'll get a permanent `https://your-app.vercel.app`
    URL you can open from any device.
 
@@ -83,10 +99,10 @@ them up).
 
 ## Using it day to day
 
-- Visit your deployed URL, sign in with your email/password.
-- Your tasks, categories, and settings are stored in Supabase under your
-  account, so logging in from your phone shows the same data as your
-  laptop.
+- Visit your deployed URL. If Supabase is configured, sign in with your email/password; otherwise use the local-only planner immediately.
+- Without Supabase, your tasks, categories, theme, and settings are stored
+  locally in your browser. With Supabase configured, they sync under your
+  account so another device can show the same data.
 - The sidebar's gear icon has:
   - **Export JSON backup** / **Export CSV** — download a copy of everything.
   - **Import JSON backup** — restore from a previous export.

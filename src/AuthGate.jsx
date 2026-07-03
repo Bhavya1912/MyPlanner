@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { AlertTriangle } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
 import Login from "./Login";
 
@@ -7,22 +6,6 @@ const centerPage = {
   minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
   background: "#F1F2F6", fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif", padding: 24,
 };
-
-function ConfigMissing() {
-  return (
-    <div style={centerPage}>
-      <div style={{ maxWidth: 420, background: "#fff", border: "1px solid #E3E5EC", borderRadius: 16, padding: 24 }}>
-        <AlertTriangle size={20} color="#DC4C4C" />
-        <h2 style={{ fontFamily: "Fraunces, serif", fontSize: 18, margin: "10px 0 6px" }}>Supabase isn't configured yet</h2>
-        <p style={{ fontSize: 13.5, color: "#6B7080", lineHeight: 1.6, margin: 0 }}>
-          Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> to a
-          <code> .env</code> file (locally) or your host's environment variables (when deployed),
-          then rebuild. See the README for step-by-step setup.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function LoadingScreen() {
   return (
@@ -42,7 +25,7 @@ export default function AuthGate({ children }) {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  if (!isSupabaseConfigured) return <ConfigMissing />;
+  if (!isSupabaseConfigured) return children({ id: "local-only", email: "Local only", isLocalOnly: true });
   if (session === undefined) return <LoadingScreen />;
   if (!session) return <Login />;
   return children(session.user);

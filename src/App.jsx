@@ -188,7 +188,7 @@ function repeatLabel(rep) {
 /* --------------------------------- APP ------------------------------------ */
 
 export default function PlannerApp({ user }) {
-  const [mode, setMode] = useState("light");
+  const [mode, setMode] = useState("dark");
   const t = THEME[mode];
 
   useEffect(() => {
@@ -219,8 +219,15 @@ export default function PlannerApp({ user }) {
     if (cached) {
       setTasks(cached.tasks || seedTasks());
       setCategories(cached.categories || DEFAULT_CATEGORIES);
-      setMode(cached.mode || "light");
+      setMode(cached.mode || "dark");
       setWeekStartsMonday(cached.weekStartsMonday ?? true);
+    }
+
+    if (user.isLocalOnly || !supabase) {
+      if (!cached) setTasks(seedTasks());
+      setCloudStatus("local");
+      hasLoadedRef.current = true;
+      return () => { cancelled = true; };
     }
 
     (async () => {
@@ -239,7 +246,7 @@ export default function PlannerApp({ user }) {
         const s = data.state;
         setTasks(s.tasks || []);
         setCategories(s.categories || DEFAULT_CATEGORIES);
-        setMode(s.mode || "light");
+        setMode(s.mode || "dark");
         setWeekStartsMonday(s.weekStartsMonday ?? true);
         setCloudStatus("synced");
       } else if (!cached) {
@@ -260,6 +267,10 @@ export default function PlannerApp({ user }) {
   useEffect(() => {
     if (!hasLoadedRef.current) return;
     saveState({ tasks, categories, mode, weekStartsMonday });
+    if (user.isLocalOnly || !supabase) {
+      setCloudStatus("local");
+      return;
+    }
     setCloudStatus("saving");
     const handle = setTimeout(async () => {
       const { error } = await supabase.from("app_state").upsert({
@@ -734,12 +745,15 @@ function Sidebar({ t, mode, setMode, open, setOpen, mobileOpen, setMobileOpen, s
                   {cloudStatus === "saving" && "Saving…"}
                   {cloudStatus === "synced" && "Synced"}
                   {cloudStatus === "offline" && "Offline — saved locally only"}
+                  {cloudStatus === "local" && "Local only"}
                 </span>
               </div>
               {userEmail && <span style={{ fontSize: 11, color: t.inkFaint }} className="truncate px-0.5">{userEmail}</span>}
-              <button onClick={() => supabase.auth.signOut()} className="flex items-center gap-2 text-xs px-2 py-1.5 rounded-md" style={{ color: t.danger, background: t.surface }}>
-                <LogOut size={12} /> Sign out
-              </button>
+              {!userEmail?.startsWith("Local") && (
+                <button onClick={() => supabase.auth.signOut()} className="flex items-center gap-2 text-xs px-2 py-1.5 rounded-md" style={{ color: t.danger, background: t.surface }}>
+                  <LogOut size={12} /> Sign out
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1028,7 +1042,7 @@ function TaskCard({ t, task, dateStr, categories, done, onToggle, onEdit, onDupl
   return (
     <div draggable={draggable} onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop}
       className="group flex gap-3 rounded-xl p-3 relative"
-      style={{ background: t.surface, border: `1px solid ${t.border}`, borderLeft: `3px solid ${pr.color}`, opacity: done ? 0.6 : 1 }}>
+      style={{ background: t.surface, border: `1px solid ${t.border}`, borderLeft: `3px solid ${task.color || pr.color}`, opacity: done ? 0.6 : 1 }}>
 
       <button onClick={onToggle} className="mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-all"
         style={{ border: `1.5px solid ${done ? pr.color : t.borderStrong}`, background: done ? pr.color : "transparent" }}>
@@ -1203,6 +1217,21 @@ function TaskModal({ t, task, categories, setCategories, onSave, onDelete, onClo
               <input type="number" min="0" value={draft.estimatedDuration || ""} onChange={(e) => set({ estimatedDuration: e.target.value ? Number(e.target.value) : null })}
                 className="w-full text-sm outline-none bg-transparent" style={{ color: t.ink }} placeholder="—" />
             </Field>
+            <Field t={t} label="Actual duration (min)">
+              <input type="number" min="0" value={draft.actualDuration || ""} onChange={(e) => set({ actualDuration: e.target.value ? Number(e.target.value) : null })}
+                className="w-full text-sm outline-none bg-transparent" style={{ color: t.ink }} placeholder="—" />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field t={t} label="Status">
+              <select value={draft.status || "active"} onChange={(e) => set({ status: e.target.value, completedAt: e.target.value === "completed" ? (draft.completedAt || todayStr()) : null })}
+                className="w-full text-sm outline-none bg-transparent" style={{ color: t.ink }}>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="archived">Archived</option>
+              </select>
+            </Field>
             <Field t={t} label="Reminder">
               <select value={draft.reminder || ""} onChange={(e) => set({ reminder: e.target.value || null })}
                 className="w-full text-sm outline-none bg-transparent" style={{ color: t.ink }}>
@@ -1214,6 +1243,16 @@ function TaskModal({ t, task, categories, setCategories, onSave, onDelete, onClo
               </select>
             </Field>
           </div>
+
+          <Field t={t} label="Task color">
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => set({ color: null })} className="text-xs px-2 py-1 rounded-md" style={{ background: draft.color ? t.surfaceAlt : t.accent, color: draft.color ? t.inkMuted : t.accentInk }}>Auto</button>
+              {SWATCHES.map((sw) => (
+                <button key={sw} onClick={() => set({ color: sw })} className="w-6 h-6 rounded-full"
+                  style={{ background: sw, outline: draft.color === sw ? `2px solid ${t.ink}` : `1px solid ${t.border}`, outlineOffset: 2 }} />
+              ))}
+            </div>
+          </Field>
 
           <Field t={t} label="Repeat">
             <div className="flex gap-2 items-center flex-wrap">
