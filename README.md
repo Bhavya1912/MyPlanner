@@ -69,9 +69,15 @@ panel: "Synced" / "Saving…" / "Offline").
 1. Push this project to a GitHub repo (or use the Vercel CLI to deploy
    directly from this folder — see below).
 2. Go to [vercel.com/new](https://vercel.com/new) and import the repo.
-3. Vercel auto-detects Vite. Before deploying, add the same two
+3. Use the **Vite** framework preset if Vercel asks you to choose one
+   (the app is React + Vite, not Create React App). Before deploying, add the same two
    environment variables from your `.env` file under **Environment
    Variables**: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+   If the site is already deployed and says Supabase is not configured, open
+   **Vercel → Project → Settings → Environment Variables**, add both values
+   for Production, then redeploy because Vite reads these values at build time.
+   Supabase's Vercel integration may create `NEXT_PUBLIC_SUPABASE_URL` and
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; this app supports those too.
 4. Click **Deploy**. You'll get a permanent `https://your-app.vercel.app`
    URL you can open from any device.
 
