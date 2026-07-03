@@ -21,9 +21,12 @@ one login for yourself, and everything is locked to that account.
    click **Run**. This creates the table that stores your planner data and
    locks it so only you can read or write it.
 3. Open **Project Settings → API**. You'll need two values from this page:
-   - **Project URL**
-   - **anon public** key (this one is safe to expose in client code — it's
-     the publishable key, not the secret one)
+   - **Project URL** → put this in `VITE_SUPABASE_URL`. It already contains
+     your Project ID/reference, for example `https://abc123xyz.supabase.co`.
+     You do not enter the Project ID separately; use it as part of this URL.
+   - **Publishable key** / **anon public** key → put this in
+     `VITE_SUPABASE_ANON_KEY`. This one is safe to expose in client code —
+     it is not the secret service role key.
 
 ## 2. Create your login
 
@@ -37,11 +40,15 @@ one login for yourself, and everything is locked to that account.
 ## 3. Configure the project
 
 1. Copy `.env.example` to a new file named `.env` in this folder.
-2. Fill in the two values from step 1:
+2. Fill in the two values from step 1. If Supabase shows a Project ID/reference
+   such as `abc123xyz`, put it inside the URL like this:
    ```
-   VITE_SUPABASE_URL=https://your-project-ref.supabase.co
-   VITE_SUPABASE_ANON_KEY=your-anon-public-key
+   VITE_SUPABASE_URL=https://abc123xyz.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-publishable-or-anon-public-key
    ```
+   Do not add a separate Project ID variable; the app only needs the full
+   Supabase URL and the anon/public key. If `npm run dev` is already running,
+   stop it and start it again after saving `.env` so Vite reloads the values.
 
 ## 4. Run it locally to test
 

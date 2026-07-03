@@ -15,9 +15,9 @@ function ConfigMissing() {
         <AlertTriangle size={20} color="#DC4C4C" />
         <h2 style={{ fontFamily: "Fraunces, serif", fontSize: 18, margin: "10px 0 6px" }}>Supabase isn't configured yet</h2>
         <p style={{ fontSize: 13.5, color: "#6B7080", lineHeight: 1.6, margin: 0 }}>
-          Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> to a
-          <code> .env</code> file (locally) or your host's environment variables (when deployed),
-          then rebuild. See the README for step-by-step setup.
+          Copy <code>.env.example</code> to <code>.env</code>, add <code>VITE_SUPABASE_URL</code> and
+          <code> VITE_SUPABASE_ANON_KEY</code>, then stop and restart <code>npm run dev</code>.
+          Deployed sites need the same values in the host's environment variables before rebuilding.
         </p>
       </div>
     </div>
