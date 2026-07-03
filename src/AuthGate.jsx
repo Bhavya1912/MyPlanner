@@ -9,15 +9,26 @@ const centerPage = {
 };
 
 function ConfigMissing() {
+  const isLocal = ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
+
   return (
     <div style={centerPage}>
       <div style={{ maxWidth: 420, background: "#fff", border: "1px solid #E3E5EC", borderRadius: 16, padding: 24 }}>
         <AlertTriangle size={20} color="#DC4C4C" />
         <h2 style={{ fontFamily: "Fraunces, serif", fontSize: 18, margin: "10px 0 6px" }}>Supabase isn't configured yet</h2>
         <p style={{ fontSize: 13.5, color: "#6B7080", lineHeight: 1.6, margin: 0 }}>
-          Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> to a
-          <code> .env</code> file (locally) or your host's environment variables (when deployed),
-          then rebuild. See the README for step-by-step setup.
+          {isLocal ? (
+            <>
+              Copy <code>.env.example</code> to <code>.env</code>, add <code>VITE_SUPABASE_URL</code> and
+              <code> VITE_SUPABASE_ANON_KEY</code>, then stop and restart <code>npm run dev</code>.
+            </>
+          ) : (
+            <>
+              Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> in your host's
+              environment variables, or use Supabase's <code>NEXT_PUBLIC_SUPABASE_URL</code> and
+              <code> NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code> names, then redeploy.
+            </>
+          )}
         </p>
       </div>
     </div>

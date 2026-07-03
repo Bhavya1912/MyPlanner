@@ -21,9 +21,12 @@ one login for yourself, and everything is locked to that account.
    click **Run**. This creates the table that stores your planner data and
    locks it so only you can read or write it.
 3. Open **Project Settings → API**. You'll need two values from this page:
-   - **Project URL**
-   - **anon public** key (this one is safe to expose in client code — it's
-     the publishable key, not the secret one)
+   - **Project URL** → put this in `VITE_SUPABASE_URL`. It already contains
+     your Project ID/reference, for example `https://abc123xyz.supabase.co`.
+     You do not enter the Project ID separately; use it as part of this URL.
+   - **Publishable key** / **anon public** key → put this in
+     `VITE_SUPABASE_ANON_KEY`. This one is safe to expose in client code —
+     it is not the secret service role key.
 
 ## 2. Create your login
 
@@ -37,11 +40,15 @@ one login for yourself, and everything is locked to that account.
 ## 3. Configure the project
 
 1. Copy `.env.example` to a new file named `.env` in this folder.
-2. Fill in the two values from step 1:
+2. Fill in the two values from step 1. If Supabase shows a Project ID/reference
+   such as `abc123xyz`, put it inside the URL like this:
    ```
-   VITE_SUPABASE_URL=https://your-project-ref.supabase.co
-   VITE_SUPABASE_ANON_KEY=your-anon-public-key
+   VITE_SUPABASE_URL=https://abc123xyz.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-publishable-or-anon-public-key
    ```
+   Do not add a separate Project ID variable; the app only needs the full
+   Supabase URL and the anon/public key. If `npm run dev` is already running,
+   stop it and start it again after saving `.env` so Vite reloads the values.
 
 ## 4. Run it locally to test
 
@@ -62,9 +69,15 @@ panel: "Synced" / "Saving…" / "Offline").
 1. Push this project to a GitHub repo (or use the Vercel CLI to deploy
    directly from this folder — see below).
 2. Go to [vercel.com/new](https://vercel.com/new) and import the repo.
-3. Vercel auto-detects Vite. Before deploying, add the same two
+3. Use the **Vite** framework preset if Vercel asks you to choose one
+   (the app is React + Vite, not Create React App). Before deploying, add the same two
    environment variables from your `.env` file under **Environment
    Variables**: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+   If the site is already deployed and says Supabase is not configured, open
+   **Vercel → Project → Settings → Environment Variables**, add both values
+   for Production, then redeploy because Vite reads these values at build time.
+   Supabase's Vercel integration may create `NEXT_PUBLIC_SUPABASE_URL` and
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; this app supports those too.
 4. Click **Deploy**. You'll get a permanent `https://your-app.vercel.app`
    URL you can open from any device.
 
