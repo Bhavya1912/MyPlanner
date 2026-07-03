@@ -1,5 +1,7 @@
--- Run this once in your Supabase project's SQL Editor
+-- Run this in your Supabase project's SQL Editor
 -- (Dashboard → SQL Editor → New query → paste this in → Run).
+-- A successful run shows "Success. No rows returned" because this script
+-- creates schema objects but does not select or insert any data.
 --
 -- It creates a single table that stores your whole planner as one JSON
 -- blob per account, and locks it down so a user can only ever read or
