@@ -13,6 +13,11 @@ create table if not exists app_state (
 
 alter table app_state enable row level security;
 
+-- Make this setup script safe to re-run after a partial or previous install.
+drop policy if exists "Users can view their own state" on app_state;
+drop policy if exists "Users can insert their own state" on app_state;
+drop policy if exists "Users can update their own state" on app_state;
+
 create policy "Users can view their own state"
   on app_state for select
   using (auth.uid() = user_id);
