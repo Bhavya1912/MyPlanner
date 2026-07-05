@@ -8,7 +8,8 @@ import {
   CalendarDays, Star, Pin, Copy, Archive, ChevronDown, Menu, Inbox,
   Download, Upload, Settings as SettingsIcon, LogOut, CloudOff,
   Eye, Code2, Paperclip, FileText, FileImage, FileArchive, FileVideo,
-  FileSpreadsheet, File as FileIcon, Loader2
+  FileSpreadsheet, File as FileIcon, Loader2, Target, BarChart3,
+  Sparkles, Flame, TrendingUp
 } from "lucide-react";
 import {
   format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek,
@@ -17,6 +18,10 @@ import {
   differenceInCalendarMonths, getDay, getDate as getDateOfMonth, isToday as dfIsToday, isBefore
 } from "date-fns";
 import { supabase } from "./supabaseClient";
+import { getDailyLog } from "./dailyLog";
+import FocusMode from "./FocusMode";
+import { MoodEnergyCard, DistractionLogButton } from "./MoodEnergy";
+import { DailyReviewView, WeeklyReviewView, MonthlyReviewView, YearReviewView } from "./Reviews";
 
 /* ---------------------------------- THEME ---------------------------------- */
 
@@ -170,7 +175,7 @@ function seedTasks() {
     createdAt: t, completedAt: null, priority: "medium", status: "active",
     categoryId: "personal", tags: [], estimatedDuration: null, actualDuration: null,
     color: null, reminder: null, repeat: null, completedDates: [], subtasks: [],
-    attachments: [], pinned: false, favorite: false, order: 0, ...over,
+    attachments: [], pomodoroCount: 0, focusMinutes: 0, interruptions: 0, pinned: false, favorite: false, order: 0, ...over,
   });
   return [
     mk({ title: "Exercise", categoryId: "fitness", priority: "high", order: 0,
@@ -259,6 +264,9 @@ export default function PlannerApp({ user }) {
   const [tasks, setTasks] = useState([]);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [weekStartsMonday, setWeekStartsMonday] = useState(true);
+  const [dailyLogs, setDailyLogs] = useState({});
+  const [yearCursor, setYearCursor] = useState(new Date().getFullYear());
+  const [reviewAnchorDate, setReviewAnchorDate] = useState(todayStr());
   const [cloudStatus, setCloudStatus] = useState("loading"); // loading | synced | saving | offline
   const hasLoadedRef = useRef(false);
   const importInputRef = useRef(null);
@@ -276,6 +284,7 @@ export default function PlannerApp({ user }) {
       setCategories(cached.categories || DEFAULT_CATEGORIES);
       setMode(cached.mode || "light");
       setWeekStartsMonday(cached.weekStartsMonday ?? true);
+      setDailyLogs(cached.dailyLogs || {});
     }
 
     (async () => {
@@ -296,6 +305,7 @@ export default function PlannerApp({ user }) {
         setCategories(s.categories || DEFAULT_CATEGORIES);
         setMode(s.mode || "light");
         setWeekStartsMonday(s.weekStartsMonday ?? true);
+        setDailyLogs(s.dailyLogs || {});
         setCloudStatus("synced");
       } else if (!cached) {
         // Brand-new account with nothing saved yet — start from sample data.
@@ -314,19 +324,49 @@ export default function PlannerApp({ user }) {
   // Supabase so it's available on other devices/browsers too.
   useEffect(() => {
     if (!hasLoadedRef.current) return;
-    saveState({ tasks, categories, mode, weekStartsMonday });
+    saveState({ tasks, categories, mode, weekStartsMonday, dailyLogs });
     setCloudStatus("saving");
     const handle = setTimeout(async () => {
       const { error } = await supabase.from("app_state").upsert({
         user_id: user.id,
-        state: { tasks, categories, mode, weekStartsMonday },
+        state: { tasks, categories, mode, weekStartsMonday, dailyLogs },
         updated_at: new Date().toISOString(),
       });
       setCloudStatus(error ? "offline" : "synced");
       if (error) console.warn("Cloud save failed, kept locally:", error.message);
     }, 800);
     return () => clearTimeout(handle);
-  }, [tasks, categories, mode, weekStartsMonday, user.id]);
+  }, [tasks, categories, mode, weekStartsMonday, dailyLogs, user.id]);
+
+  function updateDailyLog(dateStr, patch) {
+    setDailyLogs((prev) => ({
+      ...prev,
+      [dateStr]: { ...getDailyLog(prev, dateStr), ...patch },
+    }));
+  }
+  function updateDailyReview(dateStr, review) {
+    updateDailyLog(dateStr, { review });
+  }
+  function logDistraction(dateStr, reason, taskId) {
+    const log = getDailyLog(dailyLogs, dateStr);
+    updateDailyLog(dateStr, {
+      distractions: [...(log.distractions || []), { id: uid(), time: new Date().toISOString(), reason }],
+    });
+    if (taskId) {
+      setTasks((prev) => prev.map((tk) => (tk.id === taskId ? { ...tk, interruptions: (tk.interruptions || 0) + 1 } : tk)));
+    }
+  }
+  function recordFocusSession(taskId, minutes, dateStr) {
+    setTasks((prev) => prev.map((tk) => (tk.id === taskId
+      ? { ...tk, pomodoroCount: (tk.pomodoroCount || 0) + 1, focusMinutes: (tk.focusMinutes || 0) + minutes }
+      : tk)));
+    const log = getDailyLog(dailyLogs, dateStr);
+    updateDailyLog(dateStr, {
+      pomodorosCompleted: (log.pomodorosCompleted || 0) + 1,
+      focusMinutes: (log.focusMinutes || 0) + minutes,
+    });
+  }
+
 
   function exportJSON() {
     downloadFile(
@@ -460,7 +500,8 @@ export default function PlannerApp({ user }) {
       createdAt: todayStr(), completedAt: null, priority: "medium", status: "active",
       categoryId: categories[0]?.id || "personal", tags: [], estimatedDuration: null,
       actualDuration: null, color: null, reminder: null, repeat: null, completedDates: [],
-      subtasks: [], attachments: [], pinned: false, favorite: false, order: tasksForDate(dateStr).length,
+      subtasks: [], attachments: [], pomodoroCount: 0, focusMinutes: 0, interruptions: 0,
+      pinned: false, favorite: false, order: tasksForDate(dateStr).length,
     });
   }
   function openEditTask(task) { setModalTask(task); setModalDate(task.dueDate); }
@@ -518,6 +559,24 @@ export default function PlannerApp({ user }) {
     const done = dayList.filter((tk) => isDoneOn(tk, selectedDate)).length;
     return { total, done, pct: total ? Math.round((done / total) * 100) : 0 };
   }, [dayList, selectedDate]);
+
+  // Focus Mode always works off *today*, regardless of which date is
+  // selected in the Planner/Month view.
+  const [focusSkipped, setFocusSkipped] = useState([]);
+  const todayList = useMemo(() => tasksForDate(todayStr()), [tasks]);
+  const todayProgress = useMemo(() => {
+    const total = todayList.length;
+    const done = todayList.filter((tk) => isDoneOn(tk, todayStr())).length;
+    return { total, done, pct: total ? Math.round((done / total) * 100) : 0 };
+  }, [todayList]);
+  const focusQueue = useMemo(() => {
+    const incomplete = todayList.filter((tk) => !isDoneOn(tk, todayStr()));
+    const sorted = [...incomplete].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority]);
+    const skippedSet = new Set(focusSkipped);
+    return [...sorted.filter((tk) => !skippedSet.has(tk.id)), ...sorted.filter((tk) => skippedSet.has(tk.id))];
+  }, [todayList, focusSkipped]);
+  const currentFocusTask = focusQueue[0] || null;
+  const upNextFocusTask = focusQueue[1] || null;
 
   /* ---------------------------------- render --------------------------------- */
 
@@ -581,6 +640,11 @@ export default function PlannerApp({ user }) {
             {mode === "light" ? <Moon size={16} color={t.ink} /> : <Sun size={16} color={t.ink} />}
           </button>
 
+          <button onClick={() => { setFocusSkipped([]); setMainView("focus"); }}
+            className="p-2 rounded-xl" style={{ background: t.surface, border: `1px solid ${t.border}` }} title="Focus mode">
+            <Target size={16} color={t.ink} />
+          </button>
+
           <button onClick={() => openNewTask(mainView === "month" ? fmt(monthCursor) : selectedDate)}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium"
             style={{ background: t.accent, color: t.accentInk }}>
@@ -612,6 +676,17 @@ export default function PlannerApp({ user }) {
             <ResultsList t={t} title="Completed" icon={<CheckCircle2 size={16} />}
               items={completedList.map((tk) => ({ task: tk, date: tk.__date }))}
               categories={categories} onToggle={toggleDone} onEdit={openEditTask} empty="Nothing completed yet." showDate />
+          ) : mainView === "reviewDaily" ? (
+            <DailyReviewView t={t} selectedDate={selectedDate} setSelectedDate={setSelectedDate}
+              dailyLogs={dailyLogs} onUpdateReview={updateDailyReview} />
+          ) : mainView === "reviewWeekly" ? (
+            <WeeklyReviewView t={t} anchorDate={reviewAnchorDate} setAnchorDate={setReviewAnchorDate}
+              weekStartsMonday={weekStartsMonday} tasks={tasks} dailyLogs={dailyLogs} />
+          ) : mainView === "reviewMonthly" ? (
+            <MonthlyReviewView t={t} monthCursor={monthCursor} setMonthCursor={setMonthCursor}
+              tasks={tasks} dailyLogs={dailyLogs} categories={categories} />
+          ) : mainView === "reviewYear" ? (
+            <YearReviewView t={t} year={yearCursor} setYear={setYearCursor} tasks={tasks} dailyLogs={dailyLogs} categories={categories} />
           ) : (
             <DayPlanner
               t={t} selectedDate={selectedDate} setSelectedDate={setSelectedDate}
@@ -632,10 +707,25 @@ export default function PlannerApp({ user }) {
                   return prev.map((tk) => (map.has(tk.id) ? { ...tk, order: map.get(tk.id) } : tk));
                 });
               }}
+              dailyLog={getDailyLog(dailyLogs, selectedDate)}
+              onUpdateDailyLog={(patch) => updateDailyLog(selectedDate, patch)}
+              onLogDistraction={(reason) => logDistraction(selectedDate, reason, null)}
             />
           )}
         </div>
       </main>
+
+      {mainView === "focus" && (
+        <FocusMode
+          t={t} task={currentFocusTask} upNext={upNextFocusTask} progress={todayProgress}
+          categories={categories} dailyLog={getDailyLog(dailyLogs, todayStr())}
+          onComplete={(task) => toggleDone(task, todayStr())}
+          onSkip={() => currentFocusTask && setFocusSkipped((prev) => [...prev, currentFocusTask.id])}
+          onFocusComplete={(taskId, minutes) => recordFocusSession(taskId, minutes, todayStr())}
+          onLogDistraction={(reason) => logDistraction(todayStr(), reason, currentFocusTask?.id)}
+          onExit={() => setMainView("day")}
+        />
+      )}
 
       {modalTask && (
         <TaskModal
@@ -700,6 +790,20 @@ function Sidebar({ t, mode, setMode, open, setOpen, mobileOpen, setMobileOpen, s
             active={mainView === "overdue"} onClick={() => { setMainView("overdue"); setMobileOpen(false); }} />
           <NavItem t={t} open={open} icon={<CheckCircle2 size={16} />} label="Completed"
             active={mainView === "completed"} onClick={() => { setMainView("completed"); setMobileOpen(false); }} />
+        </div>
+
+        <div>
+          {open && <div className="px-2 mb-2"><SectionLabel t={t}>Reviews</SectionLabel></div>}
+          <div className="flex flex-col gap-1">
+            <NavItem t={t} open={open} icon={<Sparkles size={16} />} label="Daily review"
+              active={mainView === "reviewDaily"} onClick={() => { setMainView("reviewDaily"); setMobileOpen(false); }} />
+            <NavItem t={t} open={open} icon={<TrendingUp size={16} />} label="Weekly review"
+              active={mainView === "reviewWeekly"} onClick={() => { setMainView("reviewWeekly"); setMobileOpen(false); }} />
+            <NavItem t={t} open={open} icon={<BarChart3 size={16} />} label="Monthly review"
+              active={mainView === "reviewMonthly"} onClick={() => { setMainView("reviewMonthly"); setMobileOpen(false); }} />
+            <NavItem t={t} open={open} icon={<Flame size={16} />} label="Year in review"
+              active={mainView === "reviewYear"} onClick={() => { setMainView("reviewYear"); setMobileOpen(false); }} />
+          </div>
         </div>
 
         {open && (
@@ -966,7 +1070,7 @@ function MonthView({ t, monthCursor, setMonthCursor, selectedDate, onSelectDate,
 
 function DayPlanner({ t, selectedDate, setSelectedDate, dayList, progress, statusFilter, setStatusFilter,
   sortBy, setSortBy, categories, onToggle, onEdit, onDuplicate, onDelete, onPin, onFavorite, onArchive,
-  onAddTask, dragTaskId, setDragTaskId, onReorder }) {
+  onAddTask, dragTaskId, setDragTaskId, onReorder, dailyLog, onUpdateDailyLog, onLogDistraction }) {
 
   const dateObj = parseISO(selectedDate);
   const visible = dayList.filter((tk) => {
@@ -1003,15 +1107,21 @@ function DayPlanner({ t, selectedDate, setSelectedDate, dayList, progress, statu
           <h1 style={{ fontFamily: "Fraunces, serif", fontSize: 30, fontWeight: 500 }}>{format(dateObj, "MMMM d, yyyy")}</h1>
         </div>
 
-        <div className="rounded-xl p-3.5 min-w-[220px]" style={{ background: t.surface, border: `1px solid ${t.border}` }}>
-          <div className="flex items-center justify-between mb-1.5">
-            <span style={{ fontSize: 11, color: t.inkFaint, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>Progress</span>
-            <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 12, color: t.ink }}>{progress.pct}%</span>
+        <div className="flex items-start gap-3 flex-wrap">
+          <div className="rounded-xl p-3.5 min-w-[220px]" style={{ background: t.surface, border: `1px solid ${t.border}` }}>
+            <div className="flex items-center justify-between mb-1.5">
+              <span style={{ fontSize: 11, color: t.inkFaint, fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>Progress</span>
+              <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 12, color: t.ink }}>{progress.pct}%</span>
+            </div>
+            <div className="w-full h-2 rounded-full overflow-hidden mb-1.5" style={{ background: t.surfaceAlt }}>
+              <div className="h-full rounded-full transition-all duration-300" style={{ width: `${progress.pct}%`, background: t.accent }} />
+            </div>
+            <span style={{ fontSize: 12, color: t.inkMuted }}>{progress.done}/{progress.total} tasks complete</span>
+            <div className="mt-2.5 pt-2.5" style={{ borderTop: `1px solid ${t.border}` }}>
+              <DistractionLogButton t={t} onLog={onLogDistraction} />
+            </div>
           </div>
-          <div className="w-full h-2 rounded-full overflow-hidden mb-1.5" style={{ background: t.surfaceAlt }}>
-            <div className="h-full rounded-full transition-all duration-300" style={{ width: `${progress.pct}%`, background: t.accent }} />
-          </div>
-          <span style={{ fontSize: 12, color: t.inkMuted }}>{progress.done}/{progress.total} tasks complete</span>
+          <MoodEnergyCard t={t} dailyLog={dailyLog} onUpdate={onUpdateDailyLog} />
         </div>
       </div>
 
@@ -1109,6 +1219,11 @@ function TaskCard({ t, task, dateStr, categories, done, onToggle, onEdit, onDupl
           {(task.attachments || []).length > 0 && (
             <span className="text-[11px] flex items-center gap-1" style={{ color: t.inkFaint }}>
               <Paperclip size={10} />{task.attachments.length}
+            </span>
+          )}
+          {(task.pomodoroCount || 0) > 0 && (
+            <span className="text-[11px] flex items-center gap-1" style={{ color: t.inkFaint, fontFamily: "IBM Plex Mono, monospace" }}>
+              <Target size={10} />{task.pomodoroCount}
             </span>
           )}
           {(task.tags || []).slice(0, 3).map((tg) => (
@@ -1453,3 +1568,9 @@ function Field({ t, label, children }) {
     </div>
   );
 }
+
+/* --------------------------- shared exports (Batch 4/5) --------------------- */
+// Pomodoro/Focus Mode/Mood-Energy/Reviews live in separate files and reuse
+// this app's task/date helpers rather than duplicating them.
+export { uid, fmt, todayStr, occursOn, isDoneOn, catOf, priorityOf, THEME, PRIORITIES };
+

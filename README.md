@@ -95,6 +95,25 @@ folder after running `npm run build`, then add the env vars under
 **Site settings → Environment variables** and redeploy so the build picks
 them up).
 
+## Focus, mood & reviews (new)
+
+- **Focus icon** (top bar) opens **Focus Mode**: a distraction-free screen
+  with today's next task, a 25/5 Pomodoro timer (15-min break every 4th
+  session), and an "Interrupted" button to log what pulled you away.
+- The **Planner** view has a **Mood & energy** card — an emoji mood picker
+  and High/Medium/Low energy for morning/afternoon/night, saved per day.
+- The sidebar's **Reviews** section has four views:
+  - **Daily review** — did you finish today's work, a 1–5 productivity
+    rating, your logged interruptions, and tomorrow's priorities.
+  - **Weekly review** — tasks completed, hours worked, best/worst day, and
+    a few rule-based suggestions.
+  - **Monthly review** — completion %, category and weekday breakdowns,
+    longest streak.
+  - **Year in review** — a "wrapped"-style summary plus a GitHub-style
+    productivity heatmap.
+- All of this (mood, energy, interruptions, Pomodoro sessions, reviews)
+  is stored in the same Supabase row as your tasks — no extra setup needed.
+
 ## Using it day to day
 
 - Visit your deployed URL, sign in with your email/password.
@@ -129,7 +148,12 @@ src/main.jsx           React bootstrap, wraps the app in AuthGate
 src/AuthGate.jsx        checks login state, shows Login or the app
 src/Login.jsx           the sign-in screen
 src/supabaseClient.js   Supabase connection (reads .env values)
-src/App.jsx             the entire planner (components, state, styling)
+src/App.jsx             the core planner (calendar, tasks, sidebar, styling)
+src/dailyLog.js         mood/energy/pomodoro data model + review/streak/heatmap math
+src/Pomodoro.jsx        the 25/5 Pomodoro timer component
+src/FocusMode.jsx       distraction-free Focus Mode screen
+src/MoodEnergy.jsx      Mood & energy card + "Interrupted" distraction logger
+src/Reviews.jsx         Daily/Weekly/Monthly/Year review views + heatmap
 src/index.css           Tailwind entry point + Markdown preview styling
 supabase-schema.sql     run once in Supabase's SQL editor
 .env.example            copy to .env and fill in your project's values
