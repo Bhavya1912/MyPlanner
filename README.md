@@ -2,9 +2,9 @@
 
 A personal productivity website: monthly calendar, daily planner, and a full
 task manager (priorities, categories, tags, subtasks, recurrence, search,
-filters, sorting, drag‑to‑reschedule, light/dark mode) — backed by a real
-cloud database and a private login, so it works the same from your laptop
-or your phone.
+filters, sorting, drag‑to‑reschedule, rich Markdown notes, file attachments,
+light/dark mode) — backed by a real cloud database and a private login, so
+it works the same from your laptop or your phone.
 
 This is a **single-account app**: there's no public sign-up. You create the
 one login for yourself, and everything is locked to that account.
@@ -19,14 +19,24 @@ one login for yourself, and everything is locked to that account.
 2. Once the project is ready, open **SQL Editor** in the left sidebar, paste
    in the contents of `supabase-schema.sql` (included in this project), and
    click **Run**. This creates the table that stores your planner data and
-   locks it so only you can read or write it.
+   the access policies for it (and for attachments — see step 1a below).
 3. Open **Project Settings → API**. You'll need two values from this page:
    - **Project URL** → put this in `VITE_SUPABASE_URL`. It already contains
-     your Project ID/reference, for example `https://abc123xyz.supabase.co`.
-     You do not enter the Project ID separately; use it as part of this URL.
+     your Project ID/reference, e.g. `https://abc123xyz.supabase.co`.
    - **Publishable key** / **anon public** key → put this in
      `VITE_SUPABASE_ANON_KEY`. This one is safe to expose in client code —
      it is not the secret service role key.
+
+### 1a. Set up file attachments (new)
+
+Attached files (PDFs, images, Word/Excel docs, ZIPs, videos) are stored in
+Supabase Storage, in a private bucket.
+
+1. In the Supabase dashboard, go to **Storage → New bucket**.
+2. Name it exactly `attachments`, and leave **Public** turned **off**.
+3. That's it — the access policies for this bucket are already included in
+   `supabase-schema.sql` from step 2 above (they restrict each file to the
+   account that uploaded it).
 
 ## 2. Create your login
 
@@ -40,15 +50,11 @@ one login for yourself, and everything is locked to that account.
 ## 3. Configure the project
 
 1. Copy `.env.example` to a new file named `.env` in this folder.
-2. Fill in the two values from step 1. If Supabase shows a Project ID/reference
-   such as `abc123xyz`, put it inside the URL like this:
+2. Fill in the two values from step 1:
    ```
-   VITE_SUPABASE_URL=https://abc123xyz.supabase.co
-   VITE_SUPABASE_ANON_KEY=your-publishable-or-anon-public-key
+   VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-public-key
    ```
-   Do not add a separate Project ID variable; the app only needs the full
-   Supabase URL and the anon/public key. If `npm run dev` is already running,
-   stop it and start it again after saving `.env` so Vite reloads the values.
 
 ## 4. Run it locally to test
 
@@ -60,7 +66,8 @@ npm run dev
 Open the printed URL, sign in with the account you created in step 2 — you
 should see the planner, and any changes you make will sync to Supabase
 within a second (check the small status dot in the sidebar's settings
-panel: "Synced" / "Saving…" / "Offline").
+panel: "Synced" / "Saving…" / "Offline"). Try opening a task and attaching
+a file, and writing some Markdown in Notes, then hit **Preview**.
 
 ## 5. Deploy it as a real website
 
@@ -94,13 +101,20 @@ them up).
 - Your tasks, categories, and settings are stored in Supabase under your
   account, so logging in from your phone shows the same data as your
   laptop.
+- Open any task to see its **Notes** field, which supports Markdown:
+  `**bold**`, `_italic_`, `` `code` ``, fenced code blocks, `[links](url)`,
+  tables, and `- [ ] checklists`. Toggle **Write** / **Preview** to see it
+  rendered.
+- The same task editor has an **Attachments** section — attach PDFs,
+  images, Word/Excel files, ZIPs, or videos (up to 25MB each). Files are
+  private to your account; click a file's name to open/download it.
 - The sidebar's gear icon has:
   - **Export JSON backup** / **Export CSV** — download a copy of everything.
   - **Import JSON backup** — restore from a previous export.
   - **Sign out**.
 - A local cache is also kept in your browser so the app loads instantly and
   still works briefly offline; it reconciles with Supabase once you're back
-  online.
+  online. (Attachments themselves always need a connection.)
 
 ## If you ever want to change your password
 
@@ -116,15 +130,16 @@ src/AuthGate.jsx        checks login state, shows Login or the app
 src/Login.jsx           the sign-in screen
 src/supabaseClient.js   Supabase connection (reads .env values)
 src/App.jsx             the entire planner (components, state, styling)
-src/index.css           Tailwind entry point
+src/index.css           Tailwind entry point + Markdown preview styling
 supabase-schema.sql     run once in Supabase's SQL editor
 .env.example            copy to .env and fill in your project's values
 ```
 
 ## Tech stack
 
-React 18, Vite, Tailwind CSS, date-fns, lucide-react icons, Supabase
-(Postgres database + auth).
+React 18, Vite, Tailwind CSS, date-fns, lucide-react icons, react-markdown
++ remark-gfm (rich notes), Supabase (Postgres database, auth, and file
+storage).
 
 ## Keyboard shortcuts
 

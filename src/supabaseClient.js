@@ -1,5 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 
+console.log(import.meta.env);
+console.log("URL:", import.meta.env.VITE_SUPABASE_URL);
+console.log("ANON:", import.meta.env.VITE_SUPABASE_ANON_KEY);
+console.log("PUBLISHABLE:", import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 

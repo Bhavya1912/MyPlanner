@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   ChevronLeft, ChevronRight, Plus, Search, Sun, Moon, X, Check,
   Tag as TagIcon, ListTodo, Clock, Repeat, Trash2, Pencil,
   PanelLeftClose, PanelLeftOpen, CheckCircle2, AlertCircle,
   CalendarDays, Star, Pin, Copy, Archive, ChevronDown, Menu, Inbox,
-  Download, Upload, Settings as SettingsIcon, LogOut, CloudOff
+  Download, Upload, Settings as SettingsIcon, LogOut, CloudOff,
+  Eye, Code2, Paperclip, FileText, FileImage, FileArchive, FileVideo,
+  FileSpreadsheet, File as FileIcon, Loader2
 } from "lucide-react";
 import {
   format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek,
@@ -104,6 +108,57 @@ function csvEscape(v) {
   return `"${String(v ?? "").replace(/"/g, '""')}"`;
 }
 
+/* ------------------------------- ATTACHMENTS -------------------------------- */
+// Files are stored in a private Supabase Storage bucket named "attachments",
+// under a path scoped to the signed-in user so Storage RLS policies can
+// restrict access to their own files only. See supabase-schema.sql.
+
+const ATTACHMENTS_BUCKET = "attachments";
+const MAX_ATTACHMENT_MB = 25;
+
+function formatBytes(bytes) {
+  if (!bytes && bytes !== 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function attachmentIcon(type, name) {
+  const ext = (name || "").split(".").pop()?.toLowerCase() || "";
+  if (type?.startsWith("image/")) return FileImage;
+  if (type?.startsWith("video/")) return FileVideo;
+  if (type === "application/zip" || ["zip", "rar", "7z"].includes(ext)) return FileArchive;
+  if (["xls", "xlsx", "csv"].includes(ext)) return FileSpreadsheet;
+  if (["doc", "docx", "pdf", "txt", "md"].includes(ext)) return FileText;
+  return FileIcon;
+}
+
+async function uploadAttachment(userId, taskId, file) {
+  if (file.size > MAX_ATTACHMENT_MB * 1024 * 1024) {
+    throw new Error(`"${file.name}" is over the ${MAX_ATTACHMENT_MB}MB limit.`);
+  }
+  const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+  const path = `${userId}/${taskId}/${uid()}-${safeName}`;
+  const { error } = await supabase.storage.from(ATTACHMENTS_BUCKET).upload(path, file, { upsert: false });
+  if (error) throw error;
+  return {
+    id: uid(), path, name: file.name, size: file.size,
+    type: file.type || "application/octet-stream", uploadedAt: new Date().toISOString(),
+  };
+}
+
+async function getSignedAttachmentUrl(path) {
+  const { data, error } = await supabase.storage.from(ATTACHMENTS_BUCKET).createSignedUrl(path, 3600);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+async function deleteAttachment(path) {
+  const { error } = await supabase.storage.from(ATTACHMENTS_BUCKET).remove([path]);
+  if (error) throw error;
+}
+
+
 /* ------------------------------- SEED DATA -------------------------------- */
 
 function seedTasks() {
@@ -115,7 +170,7 @@ function seedTasks() {
     createdAt: t, completedAt: null, priority: "medium", status: "active",
     categoryId: "personal", tags: [], estimatedDuration: null, actualDuration: null,
     color: null, reminder: null, repeat: null, completedDates: [], subtasks: [],
-    pinned: false, favorite: false, order: 0, ...over,
+    attachments: [], pinned: false, favorite: false, order: 0, ...over,
   });
   return [
     mk({ title: "Exercise", categoryId: "fitness", priority: "high", order: 0,
@@ -405,7 +460,7 @@ export default function PlannerApp({ user }) {
       createdAt: todayStr(), completedAt: null, priority: "medium", status: "active",
       categoryId: categories[0]?.id || "personal", tags: [], estimatedDuration: null,
       actualDuration: null, color: null, reminder: null, repeat: null, completedDates: [],
-      subtasks: [], pinned: false, favorite: false, order: tasksForDate(dateStr).length,
+      subtasks: [], attachments: [], pinned: false, favorite: false, order: tasksForDate(dateStr).length,
     });
   }
   function openEditTask(task) { setModalTask(task); setModalDate(task.dueDate); }
@@ -586,6 +641,7 @@ export default function PlannerApp({ user }) {
         <TaskModal
           t={t} task={modalTask} categories={categories} setCategories={setCategories}
           onSave={saveTask} onDelete={deleteTask} onClose={() => { setModalTask(null); setModalDate(null); }}
+          user={user}
         />
       )}
     </div>
@@ -1050,6 +1106,11 @@ function TaskCard({ t, task, dateStr, categories, done, onToggle, onEdit, onDupl
           {task.dueTime && <span className="text-[11px] flex items-center gap-1" style={{ color: t.inkFaint, fontFamily: "IBM Plex Mono, monospace" }}><Clock size={10} />{task.dueTime}</span>}
           {task.repeat && <span className="text-[11px] flex items-center gap-1" style={{ color: t.inkFaint }}><Repeat size={10} />{repeatLabel(task.repeat)}</span>}
           {subTotal > 0 && <span className="text-[11px]" style={{ color: t.inkFaint, fontFamily: "IBM Plex Mono, monospace" }}>{subDone}/{subTotal} subtasks</span>}
+          {(task.attachments || []).length > 0 && (
+            <span className="text-[11px] flex items-center gap-1" style={{ color: t.inkFaint }}>
+              <Paperclip size={10} />{task.attachments.length}
+            </span>
+          )}
           {(task.tags || []).slice(0, 3).map((tg) => (
             <span key={tg} className="text-[11px]" style={{ color: t.accent }}>#{tg}</span>
           ))}
@@ -1128,10 +1189,15 @@ function ViewTab({ t, active, onClick, children }) {
 
 /* --------------------------------- TASK MODAL -------------------------------- */
 
-function TaskModal({ t, task, categories, setCategories, onSave, onDelete, onClose }) {
-  const [draft, setDraft] = useState(task);
+function TaskModal({ t, task, categories, setCategories, onSave, onDelete, onClose, user }) {
+  const [draft, setDraft] = useState({ attachments: [], ...task });
   const [tagInput, setTagInput] = useState("");
   const [subInput, setSubInput] = useState("");
+  const [notesMode, setNotesMode] = useState("write"); // write | preview
+  const [uploading, setUploading] = useState(false);
+  const [attachError, setAttachError] = useState("");
+  const [signedUrls, setSignedUrls] = useState({}); // path -> url
+  const fileInputRef = useRef(null);
   const isNew = !task.title && (task.subtasks || []).length === 0;
 
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
@@ -1146,6 +1212,39 @@ function TaskModal({ t, task, categories, setCategories, onSave, onDelete, onClo
     set({ subtasks: [...(draft.subtasks || []), { id: uid(), title: subInput.trim(), done: false }] });
     setSubInput("");
   };
+
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setAttachError("");
+    setUploading(true);
+    const uploaded = [];
+    for (const file of files) {
+      try {
+        const meta = await uploadAttachment(user.id, draft.id, file);
+        uploaded.push(meta);
+      } catch (err) {
+        setAttachError(err.message || "Upload failed.");
+      }
+    }
+    if (uploaded.length) set({ attachments: [...(draft.attachments || []), ...uploaded] });
+    setUploading(false);
+  }
+
+  async function handleDownload(att) {
+    try {
+      const url = signedUrls[att.path] || (await getSignedAttachmentUrl(att.path));
+      setSignedUrls((m) => ({ ...m, [att.path]: url }));
+      window.open(url, "_blank", "noopener");
+    } catch (err) {
+      setAttachError("Couldn't open that file — it may not have finished saving yet.");
+    }
+  }
+
+  async function handleRemoveAttachment(att) {
+    set({ attachments: draft.attachments.filter((a) => a.id !== att.id) });
+    try { await deleteAttachment(att.path); } catch (err) { /* file may already be gone; ignore */ }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-0 md:p-6"
@@ -1168,9 +1267,36 @@ function TaskModal({ t, task, categories, setCategories, onSave, onDelete, onClo
             placeholder="Description" rows={2} className="w-full text-sm outline-none rounded-lg p-2.5 resize-none"
             style={{ background: t.surfaceAlt, color: t.ink }} />
 
-          <textarea value={draft.notes} onChange={(e) => set({ notes: e.target.value })}
-            placeholder="Notes" rows={2} className="w-full text-sm outline-none rounded-lg p-2.5 resize-none"
-            style={{ background: t.surfaceAlt, color: t.ink }} />
+          <Field t={t} label={
+            <div className="flex items-center justify-between">
+              <span>Notes</span>
+              <div className="flex rounded-md overflow-hidden" style={{ border: `1px solid ${t.border}` }}>
+                <button type="button" onClick={() => setNotesMode("write")} className="flex items-center gap-1 text-[10px] px-2 py-0.5"
+                  style={{ background: notesMode === "write" ? t.accent : "transparent", color: notesMode === "write" ? t.accentInk : t.inkFaint }}>
+                  <Code2 size={9} /> Write
+                </button>
+                <button type="button" onClick={() => setNotesMode("preview")} className="flex items-center gap-1 text-[10px] px-2 py-0.5"
+                  style={{ background: notesMode === "preview" ? t.accent : "transparent", color: notesMode === "preview" ? t.accentInk : t.inkFaint }}>
+                  <Eye size={9} /> Preview
+                </button>
+              </div>
+            </div>
+          }>
+            {notesMode === "write" ? (
+              <textarea value={draft.notes} onChange={(e) => set({ notes: e.target.value })}
+                placeholder={"Notes support Markdown — **bold**, _italic_, `code`, ```code blocks```, [links](url), tables, and\n- [ ] checklists"}
+                rows={6} className="w-full text-sm outline-none bg-transparent resize-none font-mono"
+                style={{ color: t.ink }} />
+            ) : (
+              <div className="markdown-preview text-sm" style={{ color: t.ink, minHeight: 90 }}>
+                {draft.notes?.trim() ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{draft.notes}</ReactMarkdown>
+                ) : (
+                  <span style={{ color: t.inkFaint }}>Nothing to preview yet.</span>
+                )}
+              </div>
+            )}
+          </Field>
 
           <div className="grid grid-cols-2 gap-3">
             <Field t={t} label="Due date">
@@ -1262,6 +1388,35 @@ function TaskModal({ t, task, categories, setCategories, onSave, onDelete, onClo
                   placeholder="Add subtask…" className="text-sm outline-none bg-transparent flex-1" style={{ color: t.ink }} />
                 <button onClick={addSub} className="p-1 rounded" style={{ color: t.accent }}><Plus size={14} /></button>
               </div>
+            </div>
+          </Field>
+
+          <Field t={t} label={`Attachments ${draft.attachments?.length ? `(${draft.attachments.length})` : ""}`}>
+            <div className="flex flex-col gap-2">
+              {(draft.attachments || []).map((att) => {
+                const Icon = attachmentIcon(att.type, att.name);
+                return (
+                  <div key={att.id} className="flex items-center gap-2 rounded-md px-2 py-1.5" style={{ background: t.surface }}>
+                    <Icon size={14} color={t.inkMuted} className="shrink-0" />
+                    <button type="button" onClick={() => handleDownload(att)}
+                      className="text-xs flex-1 text-left truncate" style={{ color: t.ink }} title={att.name}>
+                      {att.name}
+                    </button>
+                    <span className="text-[10px] shrink-0" style={{ color: t.inkFaint, fontFamily: "IBM Plex Mono, monospace" }}>{formatBytes(att.size)}</span>
+                    <Download size={12} className="cursor-pointer shrink-0" color={t.inkFaint} onClick={() => handleDownload(att)} />
+                    <X size={12} className="cursor-pointer shrink-0" color={t.inkFaint} onClick={() => handleRemoveAttachment(att)} />
+                  </div>
+                );
+              })}
+              <input ref={fileInputRef} type="file" multiple className="hidden"
+                onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }} />
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                className="flex items-center justify-center gap-2 text-xs py-2 rounded-md"
+                style={{ border: `1.5px dashed ${t.border}`, color: t.inkMuted }}>
+                {uploading ? <><Loader2 size={13} className="animate-spin" /> Uploading…</> : <><Paperclip size={13} /> Attach files (PDF, image, Word, Excel, ZIP, video)</>}
+              </button>
+              {attachError && <span className="text-[11px]" style={{ color: t.danger }}>{attachError}</span>}
+              <span className="text-[10px]" style={{ color: t.inkFaint }}>Up to {MAX_ATTACHMENT_MB}MB per file. Private to your account.</span>
             </div>
           </Field>
 

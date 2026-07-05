@@ -31,3 +31,38 @@ create policy "Users can insert their own state"
 create policy "Users can update their own state"
   on app_state for update
   using (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
+-- Attachments (for the Batch 3 feature: task attachments)
+--
+-- 1. Create the storage bucket first via the Dashboard (this can't be done
+--    from SQL): Storage → New bucket → name it exactly "attachments" →
+--    leave "Public" turned OFF.
+-- 2. Then run the policies below, which restrict each user to a folder
+--    named after their own user id (files are uploaded to
+--    "<user_id>/<task_id>/<filename>", enforced in the app code).
+
+drop policy if exists "Users can upload their own attachments" on storage.objects;
+drop policy if exists "Users can view their own attachments" on storage.objects;
+drop policy if exists "Users can delete their own attachments" on storage.objects;
+
+create policy "Users can upload their own attachments"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'attachments'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "Users can view their own attachments"
+  on storage.objects for select
+  using (
+    bucket_id = 'attachments'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "Users can delete their own attachments"
+  on storage.objects for delete
+  using (
+    bucket_id = 'attachments'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
